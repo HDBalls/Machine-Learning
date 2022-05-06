@@ -1,0 +1,192 @@
+---
+title: "NOAA_Storm_Analysis"
+author: "Bola Lawal"
+date: '2022-04-25'
+output: html_document
+keep_md: true
+---
+
+```{r global_options}
+knitr::opts_chunk$set(fig.path='Figs/',echo = TRUE)
+```
+
+### TITLE: Analysis of Storm Data for understanding the impact on life and economics in the United States.
+
+## 1. SYNOPSIS: The aim of this analysis is to  explore the NOAA Storm Database 
+## and answer some basic questions about severe weather events. 
+
+## The main questions to be answered are:
+## 1.1. Across the United States, which types of events are most harmful with respect to population health?
+## 1.2. Across the United States, which types of events have the greatest economic consequences?
+
+## 2. Environment setup
+#Install the packages
+```{r, echo = TRUE}
+destination <- getwd()
+r = getOption("repos")
+r["CRAN"] = "http://cran.us.r-project.org"
+options(repos = r)
+install.packages("data.table")
+install.packages("ggplot2")
+install.packages("dplyr")
+```
+
+
+#Load the libraries
+```{r, echo = TRUE}
+library("data.table")
+library("ggplot2")
+library("dplyr")
+```
+
+
+## 3. Data Processing
+# 3.1. Load the Data first as a dataframe
+```{r, echo = TRUE}
+fileUrl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+download.file(fileUrl, destfile = paste0(destination, '/repdata%2Fdata%2FStormData.csv.bz2'))
+storm_dataframe <- read.csv("repdata%2Fdata%2FStormData.csv.bz2")
+head(storm_dataframe)
+```
+
+#3.2. Convert the dataframe into a table
+```{r, echo = TRUE}
+storm_table<-as.data.table(storm_dataframe)
+head(storm_table)
+```
+
+#3.3. Examine the columns in the data table
+```{r, echo = TRUE}
+colnames(storm_table)
+```
+
+##4. Data Transformations: Justification: This allows for a tidy dataset that will be easily manipulated and also allow for focused analysis
+#4.1. Finding columns to remove for a slim table
+```{r, echo = TRUE}
+unused_columns <- colnames(storm_table[, !c("EVTYPE"
+                                     , "FATALITIES"
+                                     , "INJURIES"
+                                     , "PROPDMG"
+                                     , "PROPDMGEXP"
+                                     , "CROPDMG"
+                                     , "CROPDMGEXP")])
+```
+
+#4.2. Revalidating the columns for removal
+```{r, echo = TRUE}
+unused_columns
+```
+
+#4.3. Exclude the columns base don the criteria above
+```{r, echo = TRUE}
+storm_table[, c(unused_columns) := NULL]
+```
+
+#4.4. Evaluate the data in the table
+```{r, echo = TRUE}
+summary(storm_table)
+```
+#4.5. Check for NULL values in the column
+```{r, echo = TRUE}
+storm_table  %>% summarise(across(everything(), ~ sum(is.na(.))))
+```
+
+#4.6. Check the unique values in the CROPDMGEXP and PROPDMGEXP columns
+```{r, echo = TRUE}
+distinct(storm_table, CROPDMGEXP)
+distinct(storm_table, PROPDMGEXP)
+```
+
+#4.7. Standardize the values in the CROPDMGEXP and PROPDMGEXP columns
+```{r, echo = TRUE}
+storm_table[,  (c("PROPDMGEXP", "CROPDMGEXP")) := c(lapply(.SD, toupper)), .SDcols = c("PROPDMGEXP", "CROPDMGEXP")]
+```
+
+#4.8. Change the property damage alphanumeric values to numeric
+```{r, echo = TRUE}
+property_damage_key <-  c("\"\"" = 10^0,
+                 "-" = 10^0, 
+                 "+" = 10^0,
+                 "0" = 10^0,
+                 "1" = 10^1,
+                 "2" = 10^2,
+                 "3" = 10^3,
+                 "4" = 10^4,
+                 "5" = 10^5,
+                 "6" = 10^6,
+                 "7" = 10^7,
+                 "8" = 10^8,
+                 "9" = 10^9,
+                 "H" = 10^2,
+                 "K" = 10^3,
+                 "M" = 10^6,
+                 "B" = 10^9)
+```
+#4.9. Change the crop damage alphanumeric values to numeric
+```{r, echo = TRUE}
+crop_damage_key <-  c("\"\"" = 10^0,
+                 "?" = 10^0, 
+                 "0" = 10^0,
+                 "K" = 10^3,
+                 "M" = 10^6,
+                 "B" = 10^9)
+
+storm_table[, PROPDMGEXP := property_damage_key[as.character(storm_table[,PROPDMGEXP])]]
+storm_table[is.na(PROPDMGEXP), PROPDMGEXP := 10^0 ]
+storm_table[, CROPDMGEXP := crop_damage_key[as.character(storm_table[,CROPDMGEXP])] ]
+storm_table[is.na(CROPDMGEXP), CROPDMGEXP := 10^0 ]
+```
+
+#4.10. Recheck the unique values in the CROPDMGEXP and PROPDMGEXP columns
+```{r, echo = TRUE}
+distinct(storm_table, CROPDMGEXP)
+distinct(storm_table, PROPDMGEXP)
+```
+
+#4.11. Adding the relevant calculated columns to the data
+```{r, echo = TRUE}
+storm_table$PROPERTY_COST <- with(storm_table, PROPDMG * PROPDMGEXP)
+storm_table$CROP_COST <- with(storm_table, CROPDMG * CROPDMGEXP)
+```
+
+##5. Results
+#5.1.Data Analysis on the total financial costs (Property and Crops) grouped by the causal event type
+```{r, echo = TRUE}
+total_cost <- storm_table[, .(PROPERTY_COST = sum(PROPERTY_COST), CROP_COST = sum(CROP_COST), SUMMED_COST = sum(CROP_COST) + sum(PROPERTY_COST)), by = .(EVTYPE)]
+total_cost <- total_cost[1:10, ]
+total_cost <- total_cost[order(-SUMMED_COST), ]
+head(total_cost)
+```
+
+#5.1.1. Analysis on Fatalities and Injuries grouped by the causal event type
+```{r, echo = TRUE}
+total_inj_fat <- storm_table[, .(FATALITIES = sum(FATALITIES), INJURIES = sum(INJURIES), TOTAL_INJ_FAT = sum(FATALITIES) + sum(INJURIES)), by = .(EVTYPE)]
+total_inj_fat <- total_inj_fat[order(-FATALITIES), ]
+total_inj_fat <- total_inj_fat[1:10, ]
+head(total_inj_fat)
+```
+
+#5.1.2. Stack the data for ease of plotting graphs
+```{r, echo = TRUE}
+health_plot <- melt(total_inj_fat, id.vars="EVTYPE", variable.name = "health_plot_var")
+head(health_plot, 10)
+```
+
+#5.1.3. Create the plot
+```{r, echo = TRUE}
+health_plot_display_1 <- ggplot(health_plot, aes(x=reorder(EVTYPE, -value), y=value)) + geom_bar(stat="identity", aes(fill=health_plot_var), position="dodge") + ylab("Frequency") + xlab("Event Type") + xlab("Event Type") + theme(axis.text.x = element_text(angle=45, hjust=1)) + ggtitle("Top Killers in the US") + theme(plot.title = element_text(hjust = 0.5)) 
+health_plot_display_1
+```
+
+#5.2. Events with the largest economic consequence
+#5.2.1. Stack the data for ease of plotting graphs
+```{r, echo = TRUE}
+econ_plot <- melt(total_cost, id.vars="EVTYPE", variable.name = "econ_plot_var")
+head(econ_plot,10)
+```
+
+#5.2.2 Create the plot
+```{r, echo = TRUE}
+econ_plot_display_1 <- ggplot(econ_plot, aes(x=reorder(EVTYPE, -value), y=value)) + geom_bar(stat="identity", aes(fill=econ_plot_var), position="dodge") + ylab("Frequency") + xlab("Event Type") + xlab("Event Type") + theme(axis.text.x = element_text(angle=45, hjust=1)) + ggtitle("Top Economic Destroyers in the US") + theme(plot.title = element_text(hjust = 0.5)) 
+econ_plot_display_1
+```

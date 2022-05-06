@@ -1,0 +1,143 @@
+---
+title: "Vehicle Analysis: A comparison of the effects of transmission types."
+author: "Bola Lawal"
+date: '2022-05-02'
+output:
+  pdf_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Executive Summary
+I wanted to evaluate whether fuel economy was affected by either automatic or manual transmission and also to find which was better for fuel economy. 
+I did some exploratory analysis to have a quick understanding of the data as well as to form an initial and simple hypothesis. 
+A hypothesis test was then performed to ensure that differences seen were not as a result of any sampling errors. 
+A correlation test was also done to check for non-independence between possible additional variables. 
+The interaction between the variables was assessed using a Liklihood Ratio Test. 
+Then, Linear Regression was used to fit a model to the data to make predictions about fuel economy with respect to the weight of a vehicle.
+Multiple models were also examined to see which combination of predictors best explained and predicted the mpg. 
+The last step was to use Regression Diagnostics to check the validity of the model as well as to verify any assumptions that were made. 
+
+##Install the packages echo=FALSE
+```{r, include=FALSE, echo=FALSE}
+destination <- getwd()
+r = getOption("repos")
+r["CRAN"] = "http://cran.us.r-project.org"
+options(repos = r)
+install.packages("data.table")
+install.packages("ggplot2")
+install.packages("dplyr")
+install.packages("lmtest")
+install.packages("flextable")
+```
+
+##Load the libraries
+```{r, Load Libraries}
+library("data.table")
+library("ggplot2")
+library("lmtest")
+library("flextable")
+library("dplyr")
+library("tinytex")
+```
+
+
+
+## Load the Data
+```{r, Load Data}
+data(mtcars)
+car_data <- tbl_df(mtcars)
+summary(car_data)
+```
+
+## Exploratory Analysis
+```{r, Exploratory Analysis}
+MPG_By_Trans <- car_data %>%
+  group_by(am) %>%
+  summarise(avgMPG = mean(mpg))
+View(MPG_By_Trans) 
+# The initial analysis shows that automatic has a much lower MPG than manual vehicles
+# Create a boxplot for further analysis
+car_plot_1<-ggplot(car_data, aes(x=factor(am), y=mpg)) + geom_boxplot()
+print(car_plot_1)
+```
+# Do a T Test
+```{r, T-Testing}
+Transmission_Test <- t.test(mpg ~ am,data=car_data)
+```
+```{r, echo = TRUE}
+exit_values_1 <- tibble(
+  "P Value" = c(Transmission_Test$p.value),
+  "Confidence Interval" = c(Transmission_Test$conf.int))
+flextable(exit_values_1)
+```
+ 
+- 1.The p-value from above is quite good at < .0014 so I can confidently reject the Null Hypothesis. 
+- 2.There is a high probability of a difference in means.
+
+# Check for Correlation
+```{r, Correlation Check}
+car_plot_2 <-ggplot(car_data, aes(x=factor(am), y=mpg)) + geom_point()
+print(car_plot_2)
+```
+
+```{r, Correlation Testing}
+cor.test(car_data$mpg,car_data$wt) 
+cor.test(car_data$cyl,car_data$mpg)
+cor.test(car_data$cyl, car_data$wt)
+```
+There seems to be a strong correlation between weight and cylinders as well as the MPG.
+
+# Regression Model
+```{r, Linear Regression_1}
+car_model <- lm(mpg ~ am, data=car_data)
+summary(car_model)
+car_model$coef
+# Using a second model
+car_model_2 <- lm(car_data$mpg ~ car_data$am + car_data$wt)
+summary(car_model_2)
+```
+car_model_2 is better than car_model_1
+
+# Including interactions between the weight and the transmission type
+```{r,Linear Regression_2}
+car_model_3 <- lm(car_data$mpg ~ car_data$am + car_data$wt + car_data$am:car_data$wt)
+summary(car_model_3)
+
+# Likelihood ratio test between the two best models
+lrtest(car_model_2, car_model_3)
+
+# Displaying the best model:
+car_model_4 <- lm(car_data$mpg ~ car_data$am + car_data$wt + car_data$cyl +
+                   car_data$am:car_data$wt + car_data$wt:car_data$cyl)
+car_model_4
+
+## Model Choices
+# -1. The baseline model (car_model_1) only looked at the relationship between transmission and MPG. 
+# -2. The Residual Squared Error was 4.9 which is the transmission prediction with # respect to MPG.
+# -3. The slope coeffecient of 7.24 infers that switching from automtic transmission to manual transmission gives 7.24 extra miles per gallon.  
+# -4. The R-squared value for the model was .36, which shows that only 36% of MPG is attributable to the type of transmission. 
+
+
+# Since the Residual Squared Error as well as the R-squared values were not so good other models were built and used which had an added predictor. 
+# The second model - car_plot_2 was compared to a third model - car_plot_3 which looked at the interaction between transmission and weight as a predictor for MPG. 
+# The p.value for the Liklihood Ratio was .0004 which is highly signficant, so the model that included the interaction was maintained. 
+# The Residual Squared Error for the model which included weight, transmission and their interaction as predictors was 2.6 and the R-squared was .83. 
+# This was a huge improvement and the model explains 83% of the variance in MPG with an error of only 2.6 miles per gallon. 
+
+### Regression Check
+# The last step is to check the validity of the model. So I need to check the 4 assumptions required to use a linear model as a predictor. 
+
+# -1. The Y-values can be expressed as a linear function of the X-variable
+# -2. The variation of observations around the regression line shows homoscedasticity.
+# -3. For a given value of X, the Y-value show a normal distribution
+
+# These can be checked very simply with the 4 plots generated by base-R's plot() function and shows the different inferences. 
+
+```{r,Regression Check}
+par(mfrow = c(2,2))
+plot(car_model_4)
+```
+
+

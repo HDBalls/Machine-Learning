@@ -1,0 +1,4 @@
+"0","exit_values_1 <- tibble("
+"0","  ""Observations"" = nrow(testing_set),"
+"0","  ""Variables"" = ncol(testing_set))"
+"0","flextable(exit_values_1)"

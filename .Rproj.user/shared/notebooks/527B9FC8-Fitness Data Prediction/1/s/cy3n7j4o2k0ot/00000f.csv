@@ -1,0 +1,4 @@
+"0","performance <- matrix(round(c(conf_Mat_GBM$overall,conf_Mat_RF$overall,conf_Mat_LDA$overall,conf_Mat_KNN$overall),4), ncol=4)"
+"0","colnames(performance)<-c('Linear Discrimination Analysis', 'K- Nearest Neighbors','Gradient Boosting','Random Forest')"
+"0","performance.df <- as.data.frame(performance)"
+"0","print(qflextable(performance.df))"
